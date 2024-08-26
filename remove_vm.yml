@@ -1,0 +1,25 @@
+---
+- name: Create VM and configure it
+  hosts: localhost
+  # vars:
+  #   vm_name: "{{ vm_name | default('minecraft_server') }}"
+  #   vm_ip:
+  tasks:
+    - name: Check VM name exist
+      stat:
+        path: "/home/test/servers/{{ vm_name }}/terraform.tfstate"
+      register: file_data
+
+    - name: Remove IP from known SSH hosts
+      command: ssh-keygen -R '{{ vm_ip }}'
+    
+    - name: Destroy VM if exist
+      command: terraform destroy -auto-approve
+      args:
+        chdir: /home/test/servers/{{ vm_name }}
+      when: file_data.stat.exists
+
+    - name: Delete VMs terraform directory
+      ansible.builtin.file:
+        state: absent
+        path: /home/test/servers/{{ vm_name }}

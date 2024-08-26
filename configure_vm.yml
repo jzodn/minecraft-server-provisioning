@@ -1,0 +1,51 @@
+- name: Update and upgrade apt packages
+  apt:
+    update_cache: yes
+    upgrade: dist
+  become: true
+
+- name: Install necessary packages
+  apt:
+    name: 
+      - openjdk-21-jre-headless
+      - wget
+    state: present
+  become: true
+
+- name: Create Minecraft server directory
+  file:
+    path: /home/test/minecraft
+    state: directory
+
+- name: Download Minecraft server
+  get_url:
+    url: https://api.papermc.io/v2/projects/paper/versions/1.21/builds/113/downloads/paper-1.21-113.jar
+    dest: /home/test/minecraft/server.jar
+
+- name: Accept EULA
+  copy:
+    dest: /home/test/minecraft/eula.txt
+    content: "eula=true"
+    
+- name: Create systemd service for Minecraft server
+  copy:
+    dest: /etc/systemd/system/minecraft.service
+    content: |
+      [Unit]
+      Description=Minecraft Server
+      After=network.target
+      [Service]
+      User=test
+      WorkingDirectory=/home/test/minecraft
+      ExecStart=java -Xmx{{ (ansible_memtotal_mb * 0.8) | round | int}}M -Xms{{ (ansible_memtotal_mb * 0.8) | round | int }}M -jar server.jar --nogui
+      Restart=on-failure
+      [Install]
+      WantedBy=multi-user.target
+  become: true
+
+- name: Enable and start Minecraft server
+  systemd:
+    name: minecraft
+    enabled: yes
+    state: started
+  become: yes

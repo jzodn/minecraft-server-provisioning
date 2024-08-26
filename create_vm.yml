@@ -1,0 +1,71 @@
+---
+- name: Create VM and configure it
+  hosts: localhost
+  # vars:
+  #   vm_name: "{{ vm_name | default('minecraft_server') }}"
+  #   cores: "{{ cores | default(2) }}"
+  #   memory: "{{ memory | default(2048) }}"
+  #   disk_size: "{{ disk_size | default(20) }}"
+  #   ip: "{{ ip | default(192.168.0.111) }}"
+  tasks:
+    - name: Ensure Terraform is installed
+      command: which terraform
+      register: terraform_installed
+      failed_when: terraform_installed.rc != 0
+      changed_when: false
+
+    - name: Create a directory for Terraform files
+      file:
+        path: /home/test/servers/{{ vm_name }}
+        state: directory
+
+    - name: Copy Terraform configuration to the directory
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+      loop:
+        - src: ./main.tf
+          dest: /home/test/servers/{{ vm_name }}/main.tf
+        - src: ./provider.tf
+          dest: /home/test/servers/{{ vm_name }}/provider.tf
+        - src: ./variables.tf
+          dest: /home/test/servers/{{ vm_name }}/variables.tf
+
+    - name: Create Terraform variables file
+      copy:
+        content: |
+          cores = {{ cores }}
+          memory = {{ memory }}
+          disk_size = {{ disk_size }}
+          vm_name = "{{ vm_name }}"
+          ip = "{{ip}}"
+        dest: /home/test/servers/{{ vm_name }}/terraform.tfvars
+
+    - name: Initialize Terraform
+      command: terraform init
+      args:
+        chdir: /home/test/servers/{{ vm_name }}
+
+    - name: Apply Terraform configuration to create the VM
+      command: terraform apply -auto-approve
+      args:
+        chdir: /home/test/servers/{{ vm_name }}
+
+    - name: Wait for SSH to be available
+      wait_for:
+        host: "{{ ip }}"
+        port: 22
+        delay: 10
+        timeout: 300
+
+    - name: Add new VMs to inventory
+      add_host:
+        name: "{{ ip }}"
+        ansible_ssh_user: test
+        ansible_ssh_private_key_file: /home/test/.ssh/id_rsa
+        group: 'just_created'
+
+- hosts: just_created
+  tasks:
+    - name: Include VM configuration tasks
+      include_tasks: configure_vm.yml
